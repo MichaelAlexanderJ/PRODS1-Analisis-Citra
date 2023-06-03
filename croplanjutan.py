@@ -131,10 +131,25 @@ def hitung_rata(array):
     return rata
 
 
+def create_allBandBoxPlot(dictAllband,outpath):
+    allkeys=sorted(dictAllband.keys())
+    allBand=[]
+    for namaBand in allkeys:
+        non_zero_data = dictAllband[namaBand].to_numpy()
+        non_zero_data = non_zero_data[non_zero_data != 0]
+        allBand.append(non_zero_data)
 
-
-# def resizeAllBand(cropBand,width,height):
     
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax.boxplot(allBand, labels=allkeys,sym='gx')
+    ax.set_title('Sentinel 2')
+    ax.title.set_fontsize(25)
+    ax.set_xlabel('Bands')
+    ax.xaxis.label.set_fontsize(20)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.savefig(os.path.join(outpath,'boxplotBands.png'), dpi=300) 
+    plt.show()
     
     
 global df_rata
@@ -151,6 +166,8 @@ inputFolder=[
     ]
 
 targetSubDirSet=set(["R10m", "R20m", "R60m"])
+
+dictAllband = {}
 
 for curInputFolder in inputFolder:
     granulFolders = []
@@ -196,14 +213,25 @@ for curInputFolder in inputFolder:
                 os.makedirs(curGeoOutputFolderRaster,exist_ok=True)
                 os.makedirs(curGeoOutputFolderRasterResize,exist_ok=True)
                 curBand.rio.to_raster(os.path.join(curGeoOutputFolderRaster,f"{resolutionName}_{bandName}_RAWVALUE.TIFF"))
+                
+                if "R10" in resFolder:
+                    if bandName not in dictAllband.keys():
+                        dictAllband[bandName]=curBand
+                        
+                        
+                # melakukan resize untuk radius 20m
                 if "R20m" in resFolder:
                     resized_band = curBand.rio.reproject(curBand.rio.crs,shape=(new_width, new_height),resampling=Resampling.nearest)
                     resized_band.rio.to_raster(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_RAWVALUE.TIFF"))
-                
+                    if bandName not in dictAllband.keys():
+                        dictAllband[bandName]=resized_band
+                    
+                # melakukan resize untuk radius 20m
                 if "R60m" in resFolder:
                     resized_band = curBand.rio.reproject(curBand.rio.crs,shape=(new_width, new_height),resampling=Resampling.nearest)
                     resized_band.rio.to_raster(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_RAWVALUE.TIFF"))
-                    
+                    if bandName not in dictAllband.keys():
+                        dictAllband[bandName]=resized_band
                 
             bandTuple=(curBand,bandName)
             createNormalizedPNG(os.path.join(curGeoOutputFolderRaster,f"{resolutionName}_{bandName}_RANGENORMALIZED.png"),bandTuple)
@@ -241,7 +269,8 @@ for curInputFolder in inputFolder:
         resultDF["x"]=pandas.Series(xIndex)
         resultDF["y"]=pandas.Series(yIndex)
         for bandData,bandName in cropBands:
-            resultDF[bandName]=pandas.Series(bandData.to_numpy().flatten())
+            resultDF[bandName]= pandas.Series(bandData.to_numpy().flatten())
+            
         resultDF.to_csv(os.path.join(curGeoOutputFolderCSV,f"{resolutionName}.csv"),index=False)
                 
         
@@ -253,4 +282,4 @@ for curInputFolder in inputFolder:
         if "R20m" in resFolder: ## bikin MI image dari R20
             createMoistureIndex(os.path.join(os.path.join(curGeoOutputFolderRaster,"MI")),cropBands)
             
-        
+create_allBandBoxPlot(dictAllband,curGeoOutputFolderRaster)
