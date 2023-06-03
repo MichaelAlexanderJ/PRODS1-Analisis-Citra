@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 """
 Created on Fri May 26 22:31:47 2023
 
@@ -22,6 +22,10 @@ import pandas
 from bs4 import BeautifulSoup
 from shapely.geometry import Polygon, MultiPolygon
 from shapely import wkt
+import rasterio
+from rasterio.enums import Resampling
+
+
 
 def parseMetadata(filePath):
     with open(filePath) as file:
@@ -127,6 +131,11 @@ def hitung_rata(array):
     return rata
 
 
+
+
+# def resizeAllBand(cropBand,width,height):
+    
+    
     
 global df_rata
 df_rata = pandas.DataFrame(columns=["Nama Tempat","Rata-Rata"])
@@ -146,6 +155,7 @@ targetSubDirSet=set(["R10m", "R20m", "R60m"])
 for curInputFolder in inputFolder:
     granulFolders = []
     yearMonthString=""
+    new_width,new_height=0,0
     for root, subdirs,files in os.walk(curInputFolder):
         subDirsAsSet = set(subdirs)
         
@@ -166,8 +176,9 @@ for curInputFolder in inputFolder:
         curGeoOutputFolder = os.path.join(outputFolder,geojsonPath[geojsonPath.rindex(os.path.sep)+1:geojsonPath.rindex(".")],yearMonthString)
         curGeoOutputFolderCSV = os.path.join(curGeoOutputFolder,"CSV")
         curGeoOutputFolderRaster = os.path.join(curGeoOutputFolder,"Raster")
-        
+        curGeoOutputFolderRasterResize = os.path.join(curGeoOutputFolderRaster,"Resize")
         cropBands=[]
+        cropBandsResize = []
         for i,bandFile in enumerate(jp2Files):
             bandName = regex.search(r"B\d+\w+_",bandFile)[0][:-1]
             notInBoundary=False
@@ -183,11 +194,35 @@ for curInputFolder in inputFolder:
                 
                 os.makedirs(curGeoOutputFolderCSV,exist_ok=True)
                 os.makedirs(curGeoOutputFolderRaster,exist_ok=True)
+                os.makedirs(curGeoOutputFolderRasterResize,exist_ok=True)
                 curBand.rio.to_raster(os.path.join(curGeoOutputFolderRaster,f"{resolutionName}_{bandName}_RAWVALUE.TIFF"))
+                if "R20m" in resFolder:
+                    resized_band = curBand.rio.reproject(curBand.rio.crs,shape=(new_width, new_height),resampling=Resampling.nearest)
+                    resized_band.rio.to_raster(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_RAWVALUE.TIFF"))
+                
+                if "R60m" in resFolder:
+                    resized_band = curBand.rio.reproject(curBand.rio.crs,shape=(new_width, new_height),resampling=Resampling.nearest)
+                    resized_band.rio.to_raster(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_RAWVALUE.TIFF"))
+                    
+                
             bandTuple=(curBand,bandName)
             createNormalizedPNG(os.path.join(curGeoOutputFolderRaster,f"{resolutionName}_{bandName}_RANGENORMALIZED.png"),bandTuple)
             createNormalizedPNG(os.path.join(curGeoOutputFolderRaster,f"{resolutionName}_{bandName}_MAXNORMALIZED.png"),bandTuple,mode="MAXNORMALIZED")
             cropBands.append(bandTuple)
+           
+            if "R20m" in resFolder:
+                bandTupleResize=(resized_band,bandName)
+                createNormalizedPNG(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_RANGENORMALIZED.png"),bandTupleResize)
+                createNormalizedPNG(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_MAXNORMALIZED.png"),bandTupleResize,mode="MAXNORMALIZED")
+                cropBandsResize.append(bandTupleResize)
+                
+            if "R60m" in resFolder:
+                bandTupleResize=(resized_band,bandName)
+                createNormalizedPNG(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_RANGENORMALIZED.png"),bandTupleResize)
+                createNormalizedPNG(os.path.join(curGeoOutputFolderRasterResize,f"{resolutionName}_{bandName}_Resize_MAXNORMALIZED.png"),bandTupleResize,mode="MAXNORMALIZED")
+                cropBandsResize.append(bandTupleResize)
+            
+                
         if notInBoundary:
             continue
         imageShape=cropBands[0][0].shape
@@ -211,36 +246,11 @@ for curInputFolder in inputFolder:
                 
         
         if "R10m" in resFolder: ## bikin RGB image dari R10
+            new_width,new_height=(cropBands[0][0].to_numpy().shape[0]),(cropBands[0][0].to_numpy().shape[1])
             createRGB_R10(os.path.join(curGeoOutputFolderRaster,"RGB10m.png"),cropBands)
             createRGB_R10(os.path.join(curGeoOutputFolderRaster,"RGB10m_MAXNORMALIZED.png"),cropBands,mode="MAXNORMALIZED")
         
         if "R20m" in resFolder: ## bikin MI image dari R20
             createMoistureIndex(os.path.join(os.path.join(curGeoOutputFolderRaster,"MI")),cropBands)
-        
             
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        
