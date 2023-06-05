@@ -156,7 +156,7 @@ global df_rata
 df_rata = pandas.DataFrame(columns=["Nama Tempat","Rata-Rata"])
 
 outputFolder = os.path.join("E:\\croplanjutan","hasil crop")
-geojsonPath = os.path.join("E:\\croplanjutan\\geojson","Sungai Karawang.geojson")
+geojsonPath = os.path.join("E:\\croplanjutan\\geojson","Sungaiii Karawang.geojson")
 geometryLokasi = gpd.read_file(geojsonPath)
 
 
