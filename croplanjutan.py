@@ -48,6 +48,7 @@ def createNormalizedPNG(outputPath,bandTuple,mode="RANGENORMALIZED"):
     resultImage=Image.fromarray(resultArray)
     resultImage.save(os.path.join(outputPath),"PNG",lossless=True)
 
+
 def createRGB_R10(outputPath,R10Bands,mode="RANGENORMALIZED"):
     resultImage = Image.new("RGB",tuple(reversed(R10Bands[0][0].shape)))
     resultArray=numpy.array(resultImage)
@@ -139,7 +140,9 @@ def create_allBandBoxPlot(dictAllband,outpath):
         non_zero_data = non_zero_data[non_zero_data != 0]
         allBand.append(non_zero_data)
 
-    
+    # ax.boxplot(allBand, labels=allkeys, sym='gx', medianprops=dict(color=median_color), boxprops=boxprops, whiskerprops=boxprops, capprops=boxprops)
+
+
     fig, ax = plt.subplots(figsize=(20, 10))
     ax.boxplot(allBand, labels=allkeys,sym='gx')
     ax.set_title('Sentinel 2')
@@ -150,13 +153,93 @@ def create_allBandBoxPlot(dictAllband,outpath):
     plt.yticks(fontsize=20)
     plt.savefig(os.path.join(outpath,'boxplotBands.png'), dpi=300) 
     plt.show()
+
+
+def createPerBandBoxPlot(bands,outpath):
+    allkeyss=sorted(bands.keys())
+    allBand=[]
+    for namaBand in allkeyss:
+        non_zero_data = bands[namaBand]
+        non_zero_data = non_zero_data[non_zero_data != 0]
+        allBand.append(non_zero_data)
+
+    # ax.boxplot(allBand, labels=allkeys, sym='gx', medianprops=dict(color=median_color), boxprops=boxprops, whiskerprops=boxprops, capprops=boxprops)
+
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax.boxplot(allBand, labels=allkeyss,sym='gx')
+    ax.set_title('Sentinel 2')
+    ax.title.set_fontsize(25)
+    ax.set_xlabel('Bands')
+    ax.xaxis.label.set_fontsize(20)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.savefig(os.path.join(outpath,'boxplotBandPilihan.png'), dpi=300) 
+    plt.show()
+    
+
+def replace_values(arr,minimal,masimal):
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            if arr[i, j] < minimal or arr[i, j] > masimal:
+                arr[i, j] = 0
+    return arr
+
+
+def flood_fill(arr,boolean,x ,y, new):
+    global count_panjang
+    if x < 0 or x >= len(arr[0]) or y < 0 or y >= len(arr[0]):
+        return
+
+    if arr[x][y] == 0 or boolean[x][y] == True:
+        return
+    
+    arr[x][y] = new
+    boolean[x][y]= True
+    count_panjang +=1
+    flood_fill(arr,boolean,x+1, y, new)
+    flood_fill(arr,boolean,x-1, y, new)
+    flood_fill(arr,boolean,x, y+1, new)
+    flood_fill(arr,boolean,x, y-1, new)
+    
+
+
+def flood(arrayBand):
+    global index_Sungai,panjang_sungai,count_panjang,nilai_sungai
+    global field,boolean
+    
+    field = numpy.copy(arrayBand)
+    boolean = numpy.zeros_like(field,dtype=bool)
+    panjang_sungai,count_panjang,nilai_sungai = 0,0,0
+    index_Sungai = 1
+    
+    for i in range(len(field)):
+        for j in range(len(field[0])):
+            count_panjang = 0
+            flood_fill(field, boolean,i ,j,index_Sungai)
+            
+            if (count_panjang > panjang_sungai):
+                panjang_sungai = count_panjang 
+                nilai_sungai = index_Sungai
+            index_Sungai +=1
     
     
+    field = numpy.array(field)
+    field[field != nilai_sungai] = 0
+    global indices
+    indices = numpy.where(field == nilai_sungai)
+    new_flid = numpy.zeros_like(arrayBand)
+    for i in range(len(indices[0])):
+        new_flid[indices[0][i]][indices[1][i]] = array1[indices[0][i]][indices[1][i]]
+
+    return new_flid
+
+
+
 global df_rata
 df_rata = pandas.DataFrame(columns=["Nama Tempat","Rata-Rata"])
 
 outputFolder = os.path.join("E:\\croplanjutan","hasil crop")
-geojsonPath = os.path.join("E:\\croplanjutan\\geojson","Sungaiii Karawang.geojson")
+geojsonPath = os.path.join("E:\\croplanjutan\\geojson","Sungai Karawang.geojson")
 geometryLokasi = gpd.read_file(geojsonPath)
 
 
@@ -172,7 +255,7 @@ dictAllband = {}
 for curInputFolder in inputFolder:
     granulFolders = []
     yearMonthString=""
-    new_width,new_height=0,0
+    new_width,new_height= 0,0
     for root, subdirs,files in os.walk(curInputFolder):
         subDirsAsSet = set(subdirs)
         
@@ -283,3 +366,102 @@ for curInputFolder in inputFolder:
             createMoistureIndex(os.path.join(os.path.join(curGeoOutputFolderRaster,"MI")),cropBands)
             
 create_allBandBoxPlot(dictAllband,curGeoOutputFolderRaster)
+BandPilihan={}
+
+
+    
+def createArrayNormalizedPNG(array,outputPath,name,mode="RANGENORMALIZED"):
+    global resultImage
+    print(array.shape)
+    outputPath = os.path.join(outputPath,"flood fill")
+    os.makedirs(outputPath,exist_ok=True)
+    resultImage = Image.new("I;16",tuple(reversed(array.shape)))
+    resultArray=numpy.array(resultImage)
+    resultArray=resultArray.astype(int)
+    resultArray[:]=array
+    if mode=="RANGENORMALIZED":
+        resultArray=resultArray/10000.0*numpy.iinfo("uint16").max
+    elif mode=="MAXNORMALIZED":
+        maxVal=resultArray.max()*1.0
+        resultArray=resultArray/maxVal*numpy.iinfo("uint16").max 
+    resultArray=resultArray.astype(numpy.uint16)
+    resultImage=Image.fromarray(resultArray)
+    resultImage.save(os.path.join(outputPath, f"{name}.png"), "PNG", lossless=True)
+
+
+
+array1 = numpy.copy(dictAllband['B8A'].to_numpy())
+name='B8A'
+minimalb8A = 1000
+maksimalb8A = 3000
+
+array1 = replace_values(array1,minimalb8A,maksimalb8A)
+
+array1= flood(array1)
+
+BandPilihan[name]=array1
+# createPerBandBoxPlot(new)
+
+createArrayNormalizedPNG(array1,curGeoOutputFolderRaster,name)
+
+# createArrayNormalizedPNG(new,mode="MAXNORMALIZED")
+
+
+array2 = numpy.copy(dictAllband['B08'].to_numpy())
+name='B08'
+minimalb08 = 1000
+maksimalb08 = 3000
+
+array2 = replace_values(array2,minimalb08,maksimalb08)
+
+array2= flood(array2)
+tuplePilihan = (array2,name)
+
+BandPilihan[name]=array2
+
+createArrayNormalizedPNG(array2,curGeoOutputFolderRaster,name)
+
+array3 = numpy.copy(dictAllband['B09'].to_numpy())
+name='B09'
+minimalB09 = 2000
+maksimalB09 = 3300
+
+array3 = replace_values(array3,minimalB09,maksimalB09)
+
+array3= flood(array3)
+tuplePilihan = (array3,name)
+
+BandPilihan[name]=array3
+
+createArrayNormalizedPNG(array3,curGeoOutputFolderRaster,name)
+
+array4 = numpy.copy(dictAllband['B12'].to_numpy())
+name = 'B12'
+minimalB12= 1000
+maksimalB12 = 1800
+
+array4 = replace_values(array4,minimalB12,maksimalB12)
+
+array4= flood(array4)
+tuplePilihan = (array4,name)
+
+BandPilihan[name]=array4
+
+createArrayNormalizedPNG(array4,curGeoOutputFolderRaster,name)
+
+createPerBandBoxPlot(BandPilihan,curGeoOutputFolderRaster)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
